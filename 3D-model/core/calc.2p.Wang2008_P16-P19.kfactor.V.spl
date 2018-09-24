@@ -1,0 +1,231 @@
+% CalC script file
+% syntax: http://web.njit.edu/~matveev/calc/manual.html
+
+% az
+% - Active Zone model [one-quarter of an AZ with 3 Ca channels]
+% - needs CalC 6.7.2/7.7.2 or higher
+% - needs CalCoMatica 3.22.0 or higher [for AP, Depolarization, Train]
+% - needs CalCoMatica 4.6.0 or higher [for Double Pulses]
+
+verbose = 0 % IMPORTANT TO WORK WITH MATHEMATICA ON WINDOWS PLATFORMS
+
+geometry = cartesian.3D
+
+Cauptake = 0
+if <* Cauptake *> != 0 then
+ uptake = <* Cauptake *>
+endif
+
+<* adaptiveSettings *>
+
+volume 0 <* a *> 0 <* b *> 0 <* c *> % diffusion volume
+
+grid <* gridX *> <* gridY *> <* gridZ *> % spatial grid
+
+% clamp <* vesC[[1]] *> <* vesC[[2]] *> <* vesC[[3]] *>
+% clamp <* vesR[[1]] *> <* vesR[[2]] *> <* vesR[[3]] *>
+
+stretch x <* stretch[[1,1]] *> <* stretch[[1,2]] *>
+stretch y <* stretch[[2,1]] *> <* stretch[[2,2]] *>
+stretch z <* stretch[[3,1]] *> <* stretch[[3,2]] *>
+stretch.factor = <* stretchFactor *>
+
+Ca.D = <* caD *> % μm^2/ms, calcium (Ca2+) diffusion coefficient
+Ca.bgr = <* caBgr *> % μM, calcium (Ca2+) initial concentration
+
+s1 = <* s *>/2 ; s2 = <* s *>+(<* s *>/2) % parameters for building "channels-net" 
+Ca.source s1 s1 0 % calcium channel location #1
+Ca.source s2 s1 0 % calcium channel location #2
+Ca.source s1 s2 0 % calcium channel location #3
+
+Ca.bc Noflux Noflux ... % x-surfaces
+      Noflux Noflux ... % y-surfaces
+      Pump Noflux % z-surfaces
+
+bc.define Pump A B C n K
+A = <* A *> % (μM*μm)/ms
+B = <* gamma *>
+C = <* Vmax *> % (μM*μm)/ms, pump rate
+n = <* n *>
+K = <* Kd *> % μM, dissociation rate/pump affinity
+
+buffer endo % endogenous buffer
+endo.D = <* endoD *> % μm^2/ms, diffusion coefficient (0 for fixed)
+% endo.KD = <* endoKd *> % μM, affinity (KD = kminus / kplus)
+endo.kminus = <* endoKoff *> % 1/ms, unbinding rate
+endo.kplus = <* endoKon *> % 1/(ms*μM), binding rate
+endo.total = <* endoTotal*> % μM, total (bound + unbound) buffer concentration (total = KB * KD)
+% endo.KB = <* endoKappa *> % kappa
+endo.bc all Noflux % zero flux reflective for all boundaries
+
+if <* dye *> != 0 then
+ buffer dye % dye buffer
+ dye.D = <* dyeD *> % μm^2/ms, diffusion coefficient
+ dye.KD = <* dyeKd *> % μM, affinity (KD = kminus / kplus)
+ dye.kminus = <* dyeKoff *> % 1/ms, unbinding rate
+ % dye.kplus = <* dyeKon *> % 1/(ms*μM), binding rate
+ dye.total  = <* dyeTotal *> % μM, total (bound + unbound) buffer concentration
+ dye.bc all Noflux % zero flux reflective for all boundaries
+endif
+
+<* cooperativeBuffers *>
+
+<* customBuffers *>
+
+% AP per channel parameters
+I.AP = <* current *> % pA, AP current
+t.AP = <* time *> % ms, AP time
+% ---
+
+% Single AP
+if <* runMode *> == 1 then
+ if <* startAP *> != 0 then
+  Run adaptive <* startAP *> ; current = 0
+ endif
+ Run adaptive t.AP ; current = I.AP pA
+  if <* endAP *> != 0 then
+   Run adaptive <* endAP *> ; current = 0
+  endif
+endif
+% ---
+
+% Train of APs
+if <* runMode *> == 2 then
+ <* train *>
+endif
+% ---
+
+% Depolarization
+if <* runMode *> == 3 then
+ if <* startDepo *> != 0 then
+  Run adaptive <* startDepo *> ; current = 0
+ endif
+ Run adaptive <* timeDepo *>; current = I.AP pA
+ if <* endDepo *> != 0 then
+  Run adaptive <* endDepo *> ; current = 0
+ endif
+endif
+% ---
+
+% Double pulses
+if <* runMode *> == 4 then
+ if <* DoublePulse["before"] *> != 0 then
+  Run adaptive <* DoublePulse["before"] *> ; current = 0
+ endif
+ Run adaptive <* DoublePulse["AP"] *> ; current = I.AP pA
+ Run adaptive <* DoublePulse["interval"] *> ; current = 0
+ Run adaptive <* DoublePulse["AP"] *> ; current = I.AP pA
+ if <* DoublePulse["after"] *> != 0 then
+  Run adaptive <* DoublePulse["after"] *> ; current = 0
+ endif
+endif
+% ---
+
+% Ca2+ binding scheme [Schneggenburger and Neher, Nature, 2000] with reloading
+NcStart = <* NcStart *>
+NrStart = <* NrStart *>
+
+dX0c/dt =                           kreload.c (NcStart - X0c) - 5 vesicle.position.c kon X0c + 1 koff b^0 X1c
+dX1c/dt = 5 kon vesicle.position.c X0c - 1 koff b^0 X1c - 4 vesicle.position.c kon X1c + 2 koff b^1 X2c
+dX2c/dt = 4 kon vesicle.position.c X1c - 2 koff b^1 X2c - 3 vesicle.position.c kon X2c + 3 koff b^2 X3c
+dX3c/dt = 3 kon vesicle.position.c X2c - 3 koff b^2 X3c - 2 vesicle.position.c kon X3c + 4 koff b^3 X4c
+dX4c/dt = 2 kon vesicle.position.c X3c - 4 koff b^3 X4c - 1 vesicle.position.c kon X4c + 5 koff b^4 X5c
+dX5c/dt = 1 kon vesicle.position.c X4c - 5 koff b^4 X5c - gamma X5c
+ dFc/dt = gamma X5c
+
+X0c(0) = NcStart
+X1c(0) = 0
+X2c(0) = 0
+X3c(0) = 0
+X4c(0) = 0
+X5c(0) = 0
+ Fc(0) = 0
+
+vesicle.position.c := Ca[<* vesC[[1]] *>,<* vesC[[2]] *>,<* vesC[[3]] *>] % position of closer vesicle (sensor)
+
+dX0r/dt =                           kreload.r (NrStart - X0r) - 5 vesicle.position.r kon X0r + 1 koff b^0 X1r
+dX1r/dt = 5 kon vesicle.position.r X0r - 1 koff b^0 X1r - 4 vesicle.position.r kon X1r + 2 koff b^1 X2r
+dX2r/dt = 4 kon vesicle.position.r X1r - 2 koff b^1 X2r - 3 vesicle.position.r kon X2r + 3 koff b^2 X3r
+dX3r/dt = 3 kon vesicle.position.r X2r - 3 koff b^2 X3r - 2 vesicle.position.r kon X3r + 4 koff b^3 X4r
+dX4r/dt = 2 kon vesicle.position.r X3r - 4 koff b^3 X4r - 1 vesicle.position.r kon X4r + 5 koff b^4 X5r
+dX5r/dt = 1 kon vesicle.position.r X4r - 5 koff b^4 X5r - gamma X5r
+ dFr/dt = gamma X5r
+
+X0r(0) = NrStart
+X1r(0) = 0
+X2r(0) = 0
+X3r(0) = 0
+X4r(0) = 0
+X5r(0) = 0
+ Fr(0) = 0
+
+vesicle.position.r := Ca[<* vesR[[1]] *>,<* vesR[[2]] *>,<* vesR[[3]] *>] % position of remote vesicle (sensor)
+
+kfactor = 0 % will be used in "if" when "kfactor" is not defined in Mathematica
+if <* kfactor *> != 0 then
+ k.factor = <* kfactor *>
+else
+ k.factor = 1
+endif
+
+Q10 = 3
+kreload.c = <* kreloadClose *> % 1/ms, reloading rate for closer vesicles
+kreload.r = <* kreloadRemote *> % 1/ms, reloading rate for remote vesicles
+kon = 0.127 Q10 k.factor % 1/(ms*μM), Ca2+ binding rate [Wang et al. 2008]
+koff = 15.7 Q10 / k.factor % 1/ms, Ca2+ unbindig rate [Wang et al. 2008]
+gamma = 6 Q10 % 1/ms, vesicle fusion rate [Wang et al. 2008]
+b = 0.25 % cooperativity parameter (factor)
+
+Rc := gamma X5c % release rate
+Rr := gamma X5r % release rate
+
+Vc := X0c + X1c + X2c + X3c + X4c + X5c % not yet released close vesicles
+Vr := X0r + X1r + X2r + X3r + X4r + X5r % not yet released remote vesicles
+
+F := (Fc + Fr)
+R := (Rc + Rr)
+V := (Vc + Vr)
+% ---
+
+% plot 1D Ca x % plot of calcium concentration along the x-axis
+% plot 1D Ca y % plot of calcium concentration along the y-axis
+% plot 1D Ca z % plot of calcium concentration along the z-axis
+
+% plot 2D Ca z 0 % plot of calcium concentration in xy-plane
+
+<* plot2D *>
+
+plot Ca[] % average concentration of Ca2+
+plot endo[] % average concentration of endo
+if <* dye *> != 0 then
+ plot dye[] % average concentration of dye
+endif
+
+<* localCa *>
+
+plot Rc
+plot Fc
+plot Vc
+plot vesicle.position.c
+
+plot Rr
+plot Fr
+plot Vr
+plot vesicle.position.r
+
+plot X0c
+plot X0r
+
+plot R
+plot F
+plot V
+
+plot Charge.loss
+plot _ICa
+plot _Charge
+
+plot.print "" % save plots to files
+
+% plot.method xmgr % plot in real-time with XmGrace
+
+% END

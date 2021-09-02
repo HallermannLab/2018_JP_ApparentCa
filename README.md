@@ -1,8 +1,10 @@
 # 2018_JP_ApparentCa
 
-This is code to run the simulations as described in the following publication:
+The code was used in the following publication:
 
-Ritzau-Jost A, Jablonski L, Viotti J, Lipstein N, Eilers J, Hallermann S. Apparent calcium dependence of vesicle recruitment. J Physiol. 2018 [doi: 10.1113/JP275911](https://physoc.onlinelibrary.wiley.com/doi/abs/10.1113/JP275911)
+Apparent calcium dependence of vesicle recruitment.  
+Ritzau-Jost A, Jablonski L, Viotti J, Lipstein N, Eilers J, Hallermann S.  
+J Physiol 2018 [doi: 10.1113/JP275911](https://physoc.onlinelibrary.wiley.com/doi/abs/10.1113/JP275911)
 
 We used two complementary approaches: a simple two-pool model implemented in C++ (Fig. 5; see folder /twopool-model) and a 3D-model implemented in Calcium Calculator modeling software ([CalC](https://web.njit.edu/~matveev/) developed by Victor Matveev, NJIT, Newark, USA) and Wolfram Mathematica (Fig. 6; see folder/3D-model).
 
